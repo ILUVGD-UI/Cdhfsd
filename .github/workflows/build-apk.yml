@@ -1,0 +1,44 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # Gradle (no wrapper jar is committed; install a pinned version directly)
+      - name: Install Gradle 8.7
+        run: |
+          wget -q https://services.gradle.org/distributions/gradle-8.7-bin.zip -O /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /tmp
+          echo "/tmp/gradle-8.7/bin" >> "$GITHUB_PATH"
+
+      # Android SDK + NDK
+      - uses: android-actions/setup-android@v2
+      - name: Install SDK components
+        run: |
+          sdkmanager --install "platforms;android-34" "build-tools;34.0.0" "ndk;26.1.10909125"
+          yes | sdkmanager --licenses > /dev/null || true
+
+      # proot binaries (one per ABI) -> app/src/main/assets/bin/proot-<abi>
+      - name: Build proot for Android
+        run: ANDROID_NDK="$ANDROID_HOME/ndk/26.1.10909125" scripts/build-proot.sh arm64-v8a armeabi-v7a
+
+      # noVNC is fetched into assets by the fetchNoVNC Gradle task
+      - name: Build APKs
+        run: gradle --no-daemon assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lindroid-apks
+          path: app/build/outputs/apk/debug/*.apk

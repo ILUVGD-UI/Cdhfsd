@@ -1,0 +1,41 @@
+#!/bin/bash
+# Runs INSIDE the Arch Linux (proot) container.
+# On first boot: initialize pacman, install TigerVNC + XFCE, set the VNC password.
+# Then starts the VNC desktop on display :1 (port 5901) and stays alive.
+export HOME=/root
+export USER=root
+
+echo "[lindroid] session starting"
+
+if [ ! -f /root/.lindroid-installed ]; then
+    echo "[lindroid] first boot: initializing pacman keyring..."
+    pacman-key --init
+    pacman-key --populate archlinuxarm
+
+    echo "[lindroid] updating system packages..."
+    pacman -Syu --noconfirm
+
+    echo "[lindroid] installing TigerVNC + XFCE (large download, 5-20 minutes on Wi-Fi)..."
+    pacman -S --noconfirm --needed tigervnc xfce4 xfce4-terminal
+
+    mkdir -p /root/.vnc
+    echo "lindroid" | vncpasswd -f > /root/.vnc/passwd
+    chmod 600 /root/.vnc/passwd
+    printf '#!/bin/bash\nxrdb $HOME/.Xresources 2>/dev/null\nstartxfce4\n' > /root/.vnc/xstartup
+    chmod +x /root/.vnc/xstartup
+
+    touch /root/.lindroid-installed
+    echo "[lindroid] desktop installed"
+fi
+
+# Kill leftovers from a previous session, if any.
+vncserver -kill :1 2>/dev/null
+rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 2>/dev/null
+
+echo "[lindroid] starting VNC server on :1 (1280x720)..."
+vncserver :1 -geometry 1280x720 -depth 24 -localhost yes
+
+echo "[lindroid] desktop ready on port 5901"
+
+# Keep the container (and the foreground service) alive.
+while true; do sleep 3600; done

@@ -1,0 +1,55 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'dev.lindroid.lindroid'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "dev.lindroid.lindroid"
+        minSdk 26          // Files.createSymbolicLink / NIO need API 26+
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    // Per-ABI APKs keep the download small: each APK only carries its own proot binary.
+    splits {
+        abi {
+            enable true
+            reset()
+            include "arm64-v8a", "armeabi-v7a"
+            universalApk false
+        }
+    }
+}
+
+dependencies {
+    // For extracting the Arch Linux ARM rootfs (tar.gz) in pure Java.
+    implementation 'org.apache.commons:commons-compress:1.26.2'
+}
+
+// noVNC (the web-based VNC client shown in the app's WebView) is fetched at build time
+// and packaged into assets. Runtime download is not needed.
+tasks.register('fetchNoVNC') {
+    def outDir = layout.projectDirectory.dir("src/main/assets/novnc")
+    outputs.dir outDir
+    doLast {
+        def zip = File.createTempFile("novnc", ".zip")
+        new URL("https://github.com/novnc/noVNC/archive/refs/tags/v1.5.0.zip")
+                .openStream().withStream { input -> zip.withOutputStream { output -> output << input } }
+        def tmp = File.createTempDir()
+        try {
+            ant.unzip(src: zip.absolutePath, dest: tmp.absolutePath)
+            ant.copy(todir: outDir.asFile.absolutePath) {
+                fileset(dir: new File(tmp, "noVNC-1.5.0").absolutePath)
+            }
+        } finally {
+            tmp.deleteDir()
+            zip.delete()
+        }
+        println "noVNC extracted to ${outDir}"
+    }
+}
+preBuild.dependsOn("fetchNoVNC")
